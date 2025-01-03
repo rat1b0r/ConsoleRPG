@@ -3,7 +3,6 @@
 *.user
 *.suo
 *.obj
-*.exe
 *.log
 *.vcxproj.user
 *.ipch
