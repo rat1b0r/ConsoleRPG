@@ -86,7 +86,7 @@ void SetConsoleProperties(int cellWidth, int cellHeight, int width, int height) 
     int y = (screenHeight - consolePixelHeight) / 2;
 
     // TODO починить эту тупую залупу с +100
-    MoveWindow(consoleWindow, x, y, consolePixelWidth + 20, consolePixelHeight + 100, TRUE);
+    MoveWindow(consoleWindow, x, y, consolePixelWidth + 30, consolePixelHeight + 100, TRUE);
 }
 
 // ћагический код, который задает цвет фона и текста
@@ -134,8 +134,6 @@ void BarDraw(int value, BackgroundColor color, int coordinateX, int coordinateY)
         cout << " ";
     }
 }
-
-
 
 class Animation {
 public:
