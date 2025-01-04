@@ -2,6 +2,8 @@
 #include <windows.h>
 #include <chrono>
 #include <thread>
+#include <string>
+
 using namespace std;
 using std::cout;
 
@@ -95,9 +97,9 @@ void SetColor(TextColor text, BackgroundColor background) {
     SetConsoleTextAttribute(hConsole, text | background);
 }
 
-// Магический код, который переносит курсор в начало
+// Магический код, который переносит курсор
 void MoveCursorToСoordinates(int a, int b) {
-    COORD coord = { b, a };  // Координаты верхнего левого угла
+    COORD coord = { b, a };
     SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), coord);
 }
 
@@ -119,21 +121,27 @@ void ShowCursor() {
     SetConsoleCursorInfo(hConsole, &cursorInfo);
 }
 
-// функция для отрисовки шкал
-void BarDraw(int value, BackgroundColor color, int coordinateX, int coordinateY) {
-    int current = value / 5;
-    int last = 20 - current;
-
-    MoveCursorToСoordinates(coordinateX, coordinateY);
-    SetColor(white, color);
-    for (int i = 0; i < current; i++) {
-        cout << " ";
-    }
-    SetColor(white, black_bg);
-    for (int i = 0; i < last; i++) {
-        cout << " ";
-    }
+// считаем количество цифр в числе
+int countDigits(int number) {
+    return std::to_string(abs(number)).length();
 }
+
+// структура для шкал
+struct BarData {
+    char barText;
+    TextColor barTextColor;
+    TextColor barTextColorNegative;
+    BackgroundColor barBackgroundColor;
+
+    BarData() : barText(' '), barTextColor(white), barTextColorNegative(black), barBackgroundColor(black_bg) {}
+
+    BarData (char _barText, TextColor _barTextColor, TextColor _barTextColorNegative, BackgroundColor _barBackgroundColor) {
+        barText = _barText;
+        barTextColor = _barTextColor;
+        barTextColorNegative = _barTextColorNegative;
+        barBackgroundColor = _barBackgroundColor;
+    }
+};
 
 class Animation {
 public:
@@ -142,26 +150,27 @@ public:
     int count = 0;
     int pause = 0;
     int animationSpeed = 2;
-    int deletingSpeed = 7;
+    int deletingSpeed = 6;
     int duration = 11;
-    int saveCells, reduceCells, deletingCursor;
+    int saveCells, reduceCells, deletingCursor, deletingValues;
     Animation() {
     }
 
     // анимация шкал
-    void BarAnimation(int value, BackgroundColor color, int coordinateX, int coordinateYBar, int barLength, int _enemyDamage) {
-
+    void AnimationDamage(int valueCurrent, int valueMax, BarData* barData, int coordinateX, int coordinateYBar, int barLength, int _enemyDamage) {
+        int barCenter = valueMax / 2;
 
         if (need == true) {
             if (count == 0 && pause == 0) {
                 // начало анимации, первый кадр
-                saveCells = (value - _enemyDamage) / 5;
+                saveCells = (valueCurrent - _enemyDamage) / 5;
                 reduceCells = barLength - saveCells;
-                deletingCursor = coordinateYBar + (value / 5) - 1;
+                deletingCursor = coordinateYBar + (valueCurrent / 5) - 1;
+                deletingValues = valueCurrent - _enemyDamage;
                 MoveCursorToСoordinates(coordinateX, coordinateYBar + saveCells);
-                for (int i = coordinateYBar + saveCells; i < coordinateYBar + (value / 5); i++) {
-                    SetColor(white, white_bg);
-                    cout << " ";
+                for (int i = coordinateYBar + saveCells; i < coordinateYBar + (valueCurrent / 5); i++) {
+                    SetColor(black , white_bg);
+                    cout << barData[i-coordinateYBar].barText;
                 }
                 count++;
 
@@ -174,15 +183,15 @@ public:
                 // второй и последующие кадры
                 MoveCursorToСoordinates(coordinateX, coordinateYBar + saveCells);
                 if (count % 2 == 0) {
-                    SetColor(white, white_bg);
-                    for (int i = coordinateYBar + saveCells; i < coordinateYBar + (value / 5); i++) {
-                        cout << " ";
+                    SetColor(black, white_bg);
+                    for (int i = coordinateYBar + saveCells; i < coordinateYBar + (valueCurrent / 5); i++) {
+                        cout << barData[i-coordinateYBar].barText;
                     }
                 }
                 else {
-                    SetColor(white, color);
-                    for (int i = coordinateYBar + saveCells; i < coordinateYBar + (value / 5); i++) {
-                        cout << " ";
+                    for (int i = coordinateYBar + saveCells; i < coordinateYBar + (valueCurrent / 5); i++) {
+                        SetColor(barData[i-coordinateYBar].barTextColor, barData[i-coordinateYBar].barBackgroundColor);
+                        cout << barData[i-coordinateYBar].barText;
                     }
                 }
                 pause = 0;
@@ -196,8 +205,27 @@ public:
                 else if (deletingCursor >= coordinateYBar + saveCells) {
                     // еще не доудаляли
                     MoveCursorToСoordinates(coordinateX, deletingCursor);
-                    SetColor(white, black_bg);
-                    cout << " ";
+                    barData[deletingCursor - coordinateYBar].barBackgroundColor = black_bg;
+                    SetColor(barData[deletingCursor-coordinateYBar].barTextColor, barData[deletingCursor-coordinateYBar].barBackgroundColor);
+                    //сам момент удаления
+                    cout << barData[deletingCursor-coordinateYBar].barText;
+                    // пересохраняем актуальное количество жизней в тексте и выводим на шкалу
+                    if (deletingValues / 5 > 0) {
+                        deletingValues -= 5;
+
+                        /////////
+                        //////////
+                        ///////////
+                        for (int i = (barCenter - 4); i < (barCenter - 2); i++) {
+                            MoveCursorToСoordinates(coordinateX, i);
+                            cout << barData[i - 1].barText;
+                        }
+                        
+                    }
+                    else {
+
+                    }
+
                     pause = 0;
                     deletingCursor--;
                 }
@@ -216,12 +244,123 @@ public:
 
 class Character {
 public:
-    int health, armor, endurance;
+    int healthCurrent, healthMax, healthBarLength, 
+        armorCurrent, armorMax, armorBarLength,
+        enduranceCurrent, enduranceMax, enduranceBarLength;
 
-    Character(int _health, int _armor, int _endurance) {
-        health = _health;
-        armor = _armor;
-        endurance = _endurance;
+    BarData* barDataHealth;
+    BarData* barDataArmor;
+    BarData* barDataEndurance;
+
+    Character(int _healthCurrent, int _healthMax, BackgroundColor _barHealthBGColor, TextColor _barHealthTextColor, TextColor _barHealthTextColorNegative,
+              int _armorCurrent, int _armorMax, BackgroundColor _barArmorBGColor, TextColor _barArmorTextColor, TextColor _barArmorTextColorNegative,
+              int _enduranceCurrent, int _enduranceMax, BackgroundColor _barEnduranceBGColor, TextColor _barEnduranceTextColor, TextColor _barEnduranceTextColorNegative) {
+        healthCurrent = _healthCurrent;
+        healthMax = _healthMax;
+        armorCurrent = _armorCurrent;
+        armorMax = _armorMax;
+        enduranceCurrent = _enduranceCurrent;
+        enduranceMax = _enduranceMax;
+
+        healthBarLength = (healthMax / 5) + 1;
+        if (healthMax % 5 == 0) {
+            healthBarLength--;
+        }
+        armorBarLength = (armorMax / 5) + 1;
+        if (armorMax % 5 == 0) {
+            armorBarLength--;
+        }
+        enduranceBarLength = (enduranceMax / 5) + 1;
+        if (enduranceMax % 5 == 0) {
+            enduranceBarLength--;
+        }
+
+
+        barDataHealth = new BarData[healthMax];
+        barDataArmor = new BarData[armorMax];
+        barDataEndurance = new BarData[enduranceMax];
+        InitializeBar(healthCurrent, healthMax, barDataHealth, healthBarLength, _barHealthBGColor, _barHealthTextColor, _barHealthTextColorNegative);
+        InitializeBar(armorCurrent, armorMax, barDataArmor, armorBarLength, _barArmorBGColor, _barArmorTextColor, _barArmorTextColorNegative);
+        InitializeBar(enduranceCurrent, enduranceMax, barDataEndurance, enduranceBarLength, _barEnduranceBGColor, _barEnduranceTextColor, _barEnduranceTextColorNegative);
+
+    }
+    // инициализация шкал
+    void InitializeBar(int currentValue, int maxValue, BarData* barData, int barLength, BackgroundColor barBackgroundColor, TextColor barTextColor, TextColor barTextColorNegative) {
+        // раскрашиваем шкалу и определяем цвет текста
+        for (int i = 0; i < barLength; i++) {
+            if (currentValue / 5 > i) {
+                barData[i].barBackgroundColor = barBackgroundColor;
+                barData[i].barTextColor = barTextColor;
+            }
+            else {
+                barData[i].barBackgroundColor = black_bg;
+                barData[i].barTextColor = barTextColorNegative;
+            }
+        }
+        UpdateBarText(currentValue, maxValue, barLength, barData);
+    }
+    void BarDraw(int barX, int barY, int barYBar, int barLength, string description, BarData* barData) {
+        MoveCursorToСoordinates(barX, barY);
+        SetColor(white, black_bg);
+        cout << description;
+        MoveCursorToСoordinates(barX, barYBar + barLength);
+        cout << "]";
+        for (int i = 0; i < barLength; i++) {
+            MoveCursorToСoordinates(barX, i+barYBar);
+            SetColor(barData[i].barTextColor, barData[i].barBackgroundColor);
+            cout << barData[i].barText;
+        }
+    }
+    void UpdateBarText(int currentValue, int maxValue, int barLength, BarData* barData) {
+        // создаем строку текста для шкалы
+        string barText(barLength, ' ');
+        int barCenter = barLength / 2;
+        int currentTemp = currentValue;
+        int maxTemp = maxValue;
+        int currentTempLength = countDigits(currentTemp);
+        int maxTempLength = countDigits(maxTemp);
+
+        if (currentTemp / 100 > 0) {
+            barText[barCenter - 4] = '0' + (currentTemp / 100);
+        }
+        currentTemp -= (currentTemp / 100) * 100;
+        if (currentTemp / 10 > 0) {
+            barText[barCenter - 3] = '0' + (currentTemp / 10);
+        }
+        else if (currentTempLength >= 2) {
+            barText[barCenter - 3] = '0' + (currentTemp / 10);
+        }
+        currentTemp -= (currentTemp / 10) * 10;
+        if (currentTemp / 1 > 0) {
+            barText[barCenter - 2] = '0' + currentTemp;
+        }
+        else if (currentTempLength >= 1) {
+            barText[barCenter - 2] = '0' + currentTemp;
+        }
+
+        barText[barCenter - 1] = '/';
+
+        if (maxTemp / 100 > 0) {
+            barText[barCenter] = '0' + (maxTemp / 100);
+        }
+        maxTemp -= (maxTemp / 100) * 100;
+        if (maxTemp / 10 > 0) {
+            barText[barCenter + 1] = '0' + (maxTemp / 10);
+        }
+        else if (maxTempLength >= 2) {
+            barText[barCenter + 1] = '0' + (maxTemp / 10);
+        }
+        maxTemp -= (maxTemp / 10) * 10;
+        if (maxTemp / 1 > 0) {
+            barText[barCenter + 2] = '0' + maxTemp;
+        }
+        else if (maxTempLength >= 1) {
+            barText[barCenter + 2] = '0' + maxTemp;
+        }
+        // пишем текст в шкалу
+        for (int i = 0; i < barLength; i++) {
+            barData[i].barText = barText[i];
+        }
     }
 };
 
@@ -258,30 +397,33 @@ int main() {
 
 
     // основные переменные
-    Character Player(100, 100, 100);
+    Character Player(100, 100, red_bg, white, black, 100, 100, blue_bg, white, black, 100, 100, yellow_bg, black, white);
     Animation BarAnimation;
 
     int barHealthX = 1;
     int barHealthY = 2;
     int barHealthYBar = 16;
-    int barHealthLength = Player.health / 5;
+    int barHealthLength = Player.healthMax / 5;
+    string barHealthDescription = "Здоровье     [";
 
     int barArmorX = 3;
     int barArmorY = 2;
     int barArmorYBar = 16;
-    int barArmorLength = Player.armor / 5;
+    int barArmorLength = Player.armorMax / 5;
+    string barArmorDescription = "Броня        [";
 
     int barEnduranceX = 5;
     int barEnduranceY = 2;
     int barEnduranceYBar = 16;
-    int barEnduranceLength = Player.endurance / 5;
+    int barEnduranceLength = Player.enduranceMax / 5;
+    string barEnduranceDescription = "Выносливость [";
 
     int debugFPSX = 1;
     int debugFPSY = 116;
     int debugFramesX = 2;
     int debugFramesY = 116;
 
-    int enemyDamage = 15;
+    int enemyDamage = 14;
 
     // рисуем рамку интерфейса
     SetColor(red, black_bg);
@@ -293,38 +435,9 @@ int main() {
     cout << "------------------------------------------------------------------------------------------------------------------------" << endl;
 
     // рисуем шкалы
-    // здоровье
-    SetColor(white, black_bg);
-    MoveCursorToСoordinates(barHealthX, barHealthY);
-    cout << "Здоровье     [";
-    for (int i = 0; i < barHealthLength; i++) {
-        cout << " ";
-    }
-    cout << "]";
-    // броня
-    SetColor(white, black_bg);
-    MoveCursorToСoordinates(barArmorX, barArmorY);
-    cout << "Броня        [";
-    for (int i = 0; i < barArmorLength; i++) {
-        cout << " ";
-    }
-    cout << "]";
-    // выносливость
-    SetColor(white, black_bg);
-    MoveCursorToСoordinates(barEnduranceX, barEnduranceY);
-    cout << "Выносливость [";
-    for (int i = 0; i < barEnduranceLength; i++) {
-        cout << " ";
-    }
-    cout << "]";
-
-    // заполняем шкалы
-    // здоровье
-    BarDraw(Player.health, red_bg, barHealthX, barHealthYBar);
-    // броня
-    BarDraw(Player.armor, blue_bg, barArmorX, barArmorYBar);
-    // выносливость
-    BarDraw(Player.endurance, yellow_bg, barEnduranceX, barEnduranceYBar);
+    Player.BarDraw(barHealthX, barHealthY, barHealthYBar, barHealthLength, barHealthDescription, Player.barDataHealth);
+    Player.BarDraw(barArmorX, barArmorY, barArmorYBar, barArmorLength, barArmorDescription, Player.barDataArmor );
+    Player.BarDraw(barEnduranceX, barEnduranceY, barEnduranceYBar, barEnduranceLength, barEnduranceDescription, Player.barDataEndurance );
 
     // все цвета
     MoveCursorToСoordinates(49, 2);
@@ -344,17 +457,6 @@ int main() {
     cout << " ";
     SetColor(white, white_bg);
     cout << " ";
-
-
-
-
-
-
-
-
-
-    // возвращаем дефолтный цвет
-    SetColor(white, black_bg);
 
 
     ////////////////////////////////////////////////
@@ -384,40 +486,68 @@ int main() {
 
 
 
-        BarAnimation.BarAnimation(Player.health, red_bg, barHealthX, barHealthYBar, barHealthLength, enemyDamage);
-
+        BarAnimation.AnimationDamage(Player.healthCurrent, Player.healthMax, Player.barDataHealth, barHealthX, barHealthYBar, barHealthLength, enemyDamage);
+        
         if (BarAnimation.need == false) {
             BarAnimation.need = true;
-            Player.health -= enemyDamage;
+            Player.healthCurrent -= enemyDamage;
         }
-
-
         // Пауза 33 миллисекунды
         std::this_thread::sleep_for(std::chrono::milliseconds(33));
-
-
-
-
-
-
-
-
-
     }
     return 0;
 }
 
-//TODO сделать паузу в анимации чтобы плавно делалось, и потом чтобы по одной клеточке отнималось
-//TODO контрастные надписи на шкалах
-//TODO при взаимодействии мышкой с окном консоли включается пауза до нажатия любой кнопки
-//TODO удаление ячеек не должно уходить левее нуля
-//TODO сделать смерть гг
-//TODO консоль начинает гнать при изменении размера, надо заблочить
-//TODO консоль надо подогнать под ячейки четко без запаса по краям
-//TODO масштабировать анимации на остальные шкалы
-//TODO реализовать движок менеджера анимаций (с обработкой перекрывающегося урона например)
-//TODO передвижение по карте с клавиатуры
-//TODO реализация тумана войны в 2 слоя (с полным незнанием и с потерей актуализации со временем)
-//TODO движок боя и первая драка
-//TODO шмотки у врагов и гг с модификаторами на статы
-//TODO прокачка уровня
+/*
+                                        v. 0.0.3a 
+Изменения:
+
+    переделал шкалы через массив struct, теперь можно независимо менять текст и цвета текста и фона для удобного обращения через менеджер анимаций
+    написал текст на шкалах, реализовал контрастные надписи при анимации и неодинаковой раскраске шкалы
+    масштабировал анимации на остальные шкалы, теперь вообще похер где шкала и прочее, все на переменных
+
+Известные проблемы и планы на будущее (чем ближе к концу тем позже будет реализовано +-, порядок может незначительно меняться):
+
+    удаление ячеек не должно уходить левее нуля
+    перерисовка значения шкалы (пока не получается передать объект в параметр метода, остальное в целом реализовано)
+    при взаимодействии мышкой с окном консоли включается пауза до нажатия любой кнопки
+    сделать смерть гг
+    консоль начинает гнать при изменении размера, надо заблочить
+    консоль надо подогнать под ячейки четко без запаса по краям
+    реализовать движок менеджера анимаций (с обработкой перекрывающегося урона например)
+    передвижение по карте с клавиатуры
+    реализация тумана войны в 2 слоя (с полным незнанием и с потерей актуализации со временем)
+    движок боя и первая драка
+    шмотки у врагов и гг с модификаторами на статы
+    прокачка уровня
+    разобраться с деструкторами и поубивать персонажей
+
+
+
+                                        v. 0.0.2a 
+Изменения:
+
+    создано консольное окно с поддержкой русского языка, фиксированным игровым полем, реалтайм циклом
+    включен счетчик fps для дебага
+    оптимизирован код для отрисовки только изменений
+    реализован метод отрисовки шкалы здоровья
+    реализован метод анимации шкалы здоровья при получении урона
+    реализован прототип класса менеджера анимаций
+
+Известные проблемы и планы на будущее (чем ближе к концу тем позже будет реализовано +-, порядок может незначительно меняться):
+
+    сделать паузу в анимации чтобы плавно делалось, и потом чтобы по одной клеточке отнималось
+    контрастные надписи на шкалах
+    при взаимодействии мышкой с окном консоли включается пауза до нажатия любой кнопки
+    удаление ячеек не должно уходить левее нуля
+    сделать смерть гг
+    консоль начинает гнать при изменении размера, надо заблочить
+    консоль надо подогнать под ячейки четко без запаса по краям
+    масштабировать анимации на остальные шкалы
+    реализовать движок менеджера анимаций (с обработкой перекрывающегося урона например)
+    передвижение по карте с клавиатуры
+    реализация тумана войны в 2 слоя (с полным незнанием и с потерей актуализации со временем)
+    движок боя и первая драка
+    шмотки у врагов и гг с модификаторами на статы
+    прокачка уровня
+*/
